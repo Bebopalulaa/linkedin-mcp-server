@@ -120,6 +120,7 @@ async def test_composer_avatar_swapped_after_binding_refuses_submit(dom_page):
 
     pinned = await dom_page.evaluate_handle(PIN_EDITOR_JS, arg={"scope": root})
     editor = (await pinned.get_property("editor")).as_element()
+    assert editor is not None
     await editor.click()
     await dom_page.keyboard.type("Bonjour")
     await dom_page.evaluate(OWN_EDITOR_JS, {"editor": editor, "text": "Bonjour"})
@@ -160,10 +161,12 @@ async def test_sole_binding_refuses_and_reports_why(
     actions = PostActions(session, PageNavigator(session))
 
     assert await actions._select_actor(root, actor) is None
-    assert actions._actor_diagnostics["actor_binding"] == expected
-    assert actions._actor_diagnostics["lang"] == "fr"
+    diagnostics = actions._actor_diagnostics
+    assert diagnostics is not None
+    assert diagnostics["actor_binding"] == expected
+    assert diagnostics["lang"] == "fr"
     if expected == "unknown_switcher":
-        assert actions._actor_diagnostics["label"] == "Changer de compte"
+        assert diagnostics["label"] == "Changer de compte"
     refusal = actions._actor_unavailable("https://www.linkedin.com/x", "refused")
     assert refusal["status"] == "actor_unavailable"
     assert refusal["diagnostics"]["actor_binding"] == expected
