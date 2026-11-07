@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import anyio
 import pytest
-import anyio
 from fastmcp import FastMCP
 from fastmcp.tools import FunctionTool
 

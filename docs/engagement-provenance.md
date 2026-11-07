@@ -88,3 +88,18 @@ changed route, actor, root identity, or ambiguous bar refuses. After dispatch,
 the clicked toggle remains the only reaction receipt. Mention typing accepts
 the single newline only after rechecking its exact draft, token and actor;
 concurrent content is preserved and refused.
+
+## Members without an account switcher
+
+A member who manages no page sees no "comment as" switcher, and the English
+picker labels never apply to a member using another interface language. When
+no readable switcher is present, the personal actor is bound instead to the
+avatar rendered beside the post's own comment editor. The climb from the
+editor stops before the action bar and the rendered comment list, so the post
+author's and commenters' avatars cannot stand in for it. The avatar must be a
+member photo with exactly the asset of the requested `/in/` profile. An avatar
+wrapped in a button or popup control is treated as a switcher this module
+cannot read, and the refusal returns that control's label in `diagnostics`
+together with the page language, so the label can be added from a dry run.
+The binding is rechecked before typing and before submitting, and the receipt
+still requires the new comment's linked identity and avatar.

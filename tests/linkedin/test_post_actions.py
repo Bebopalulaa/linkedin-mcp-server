@@ -42,6 +42,7 @@ PROGRAMS = {
     "actor_open": post_actions.OPEN_ACTOR_PICKER_JS,
     "actor_select": post_actions.SELECT_ACTOR_JS,
     "actor_pin": post_actions.PIN_ACTOR_JS,
+    "actor_sole": post_actions.PIN_SOLE_ACTOR_JS,
     "refresh_reaction": post_actions.REFRESH_REACTION_CONTROLS_JS,
     "signals": post_actions.POST_ACTION_SIGNALS_JS,
     "can_type": post_actions.CAN_TYPE_EDITOR_JS,
@@ -211,6 +212,7 @@ class FakePage:
         answers.setdefault("actor_open", True)
         answers.setdefault("actor_select", "selected")
         answers.setdefault("actor_pin", True)
+        answers.setdefault("actor_sole", {"status": "pinned", "lang": "fr"})
         answers.setdefault("refresh_reaction", True)
         if isinstance(answers.get("signals"), list):
             answers["signals"] = [answers["signals"][0], *answers["signals"]]
@@ -715,6 +717,69 @@ async def test_actor_refusal_never_types_or_publishes(answer):
     assert result["status"] == "actor_unavailable"
     assert not result["acted"] and result["retry_safe"]
     assert not ({"type", "submit", "react"} & set(page.calls))
+
+
+async def test_member_without_switcher_comments_through_the_sole_binding():
+    # A member who manages no page has no switcher, in any language. The
+    # comment box's own avatar binds the actor instead of the picker.
+    page = FakePage(
+        signals=signals(editors=1),
+        units=[0, 1],
+        submit="submitted",
+        actor_open=False,
+    )
+    with navigated():
+        result = await actions(page).comment_on_post(
+            PERMALINK, "Belle silhouette", actor="/in/actor/", confirm_comment=True
+        )
+    assert result["status"] == "commented"
+    assert "actor_sole" in page.calls
+    assert "actor_select" not in page.calls
+    assert page.calls.index("actor_sole") < page.calls.index("submit")
+
+
+@pytest.mark.parametrize(
+    "answer,expected",
+    [
+        (
+            {"status": "avatar_mismatch", "lang": "fr"},
+            {"actor_binding": "avatar_mismatch", "lang": "fr"},
+        ),
+        (
+            {"status": "unknown_switcher", "label": "Changer de compte", "lang": "fr"},
+            {
+                "actor_binding": "unknown_switcher",
+                "label": "Changer de compte",
+                "lang": "fr",
+            },
+        ),
+        ("", {"actor_binding": "unreadable"}),
+    ],
+)
+async def test_sole_binding_refusal_reports_what_it_saw(answer, expected):
+    page = FakePage(signals=signals(), actor_open=False, actor_sole=answer)
+    with navigated():
+        result = await actions(page).comment_on_post(
+            PERMALINK, "hello", actor="/in/actor/", confirm_comment=True
+        )
+    assert result["status"] == "actor_unavailable"
+    assert result["diagnostics"] == expected
+    assert not result["acted"] and result["retry_safe"]
+    assert not ({"type", "submit", "react"} & set(page.calls))
+
+
+async def test_sole_binding_waits_for_a_late_comment_box():
+    page = FakePage(
+        signals=signals(editors=1),
+        actor_open=False,
+        actor_sole=[{"status": "no_editor"}, {"status": "pinned", "lang": "fr"}],
+    )
+    with navigated():
+        result = await actions(page).comment_on_post(
+            PERMALINK, "hello", actor="/in/actor/"
+        )
+    assert result["status"] == "confirmation_required"
+    assert page.calls.count("actor_sole") >= 2
 
 
 @pytest.mark.parametrize(

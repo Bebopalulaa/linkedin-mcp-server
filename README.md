@@ -108,9 +108,9 @@ Use code <strong>FOUNDING20</strong> for 20% off your first year. <a href="https
 | `search_posts` | Search posts by keyword, optionally filtered by recency or content type. |
 | `get_session_status` | Check your saved login and browser state without opening a browser. |
 | `react_to_post` | Add a `like` to one post with `actor` and `confirm_reaction=true`. |
-| `comment_on_post` | Publish a comment with `actor` and `confirm_comment=true`; optionally `mention_author=true`. |
+| `comment_on_post` | Publish a comment as `actor`, only with `confirm_comment=true`. |
 | `get_post_comments` | Read currently rendered comment bodies and exact URN references (cap 50). |
-| `reply_to_comment` | Reply to an exact rendered comment as a verified personal/company actor; requires explicit confirmation. |
+| `reply_to_comment` | Reply to one exact comment as `actor`, only with `confirm_reply=true`. |
 | `close_session` | Close the shared browser session without deleting your saved login. |
 
 Post engagement accepts an explicit `actor` URL: `/in/<member>/` for your own
@@ -118,7 +118,9 @@ profile or `/company/<company>/` for a page you manage. Write tools default to
 a dry run. The selected actor must be verified in the page before publishing;
 unavailable or ambiguous identities refuse without publishing. An existing
 reaction is preserved. When `retry_safe` is false, inspect the post before
-retrying because the action may already have reached LinkedIn.
+retrying because the action may already have reached LinkedIn. A member who
+manages no page has no account switcher: the comment box's own avatar then
+verifies the personal actor, whatever the interface language.
 
 Use `get_person_profile` with `sections="posts"`, `get_company_posts`, `get_feed`
 or `search_posts` to obtain post references. See

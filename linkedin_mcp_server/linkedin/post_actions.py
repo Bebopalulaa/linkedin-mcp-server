@@ -42,6 +42,7 @@ from linkedin_mcp_server.linkedin.post_actors import (
     SELECT_ACTOR_JS,
     SAVE_ACTOR_JS,
     PIN_ACTOR_JS,
+    PIN_SOLE_ACTOR_JS,
 )
 from linkedin_mcp_server.linkedin.post_mentions import (
     READ_POST_AUTHOR_JS,
@@ -874,6 +875,16 @@ class PostActions:
     def __init__(self, session: PageSession, navigator: PageNavigator):
         self._session = session
         self._navigator = navigator
+        # What the last failed actor binding saw, returned with the refusal so
+        # a layout or language this module lacks can be read from one dry run.
+        self._actor_diagnostics: dict[str, Any] | None = None
+
+    def _actor_unavailable(self, permalink: str, message: str) -> dict[str, Any]:
+        """The actor refusal, with what the page showed when binding failed."""
+        result = post_action_result(permalink, "actor_unavailable", message)
+        if self._actor_diagnostics:
+            result["diagnostics"] = dict(self._actor_diagnostics)
+        return result
 
     async def _resolve_actor(self, actor: str) -> dict[str, str] | None:
         """Bind the requested URL to its rendered name and unique avatar."""
@@ -895,8 +906,13 @@ class PostActions:
         self, root: ElementHandle, actor: dict[str, str]
     ) -> ElementHandle | None:
         """Select a uniquely mapped actor and verify the resulting control."""
+        self._actor_diagnostics = None
         if not await self._session.run_on_linkedin(OPEN_ACTOR_PICKER_JS, root):
-            return None
+            # No switcher this module can read: either the member manages no
+            # page (the comment box then shows only their avatar), or the
+            # switcher speaks a language it lacks. The sole-actor binding tells
+            # the two apart and refuses the second.
+            return await self._pin_sole_actor(root, actor)
         saved = False
         outcome = "pending"
         for _ in range(20):
@@ -932,6 +948,39 @@ class PostActions:
                     return selected
                 await refreshed.dispose()
             await asyncio.sleep(_CONFIRM_POLL)
+        return None
+
+    async def _pin_sole_actor(
+        self, root: ElementHandle, actor: dict[str, str]
+    ) -> ElementHandle | None:
+        """Bind a personal actor to the comment box's own avatar, or refuse.
+
+        The comment box can render after the action bar, so a missing editor
+        is waited for within the editor timeout. Every other answer is final.
+        """
+        deadline = self._session.monotonic() + _EDITOR_TIMEOUT / 1000
+        outcome: Any = None
+        status: str | None = None
+        while True:
+            outcome = await self._session.run_on_linkedin(
+                PIN_SOLE_ACTOR_JS, {"root": root, "actor": actor}
+            )
+            status = outcome.get("status") if isinstance(outcome, dict) else None
+            if status != "no_editor" or self._session.monotonic() >= deadline:
+                break
+            await self._session.delay(_CONFIRM_POLL)
+        if status == "pinned":
+            return root
+        self._actor_diagnostics = {
+            "actor_binding": status or "unreadable",
+            **(
+                {
+                    key: str(outcome[key])[:120]
+                    for key in ("label", "lang")
+                    if isinstance(outcome, dict) and outcome.get(key)
+                }
+            ),
+        }
         return None
 
     async def _open_post(
@@ -1056,9 +1105,8 @@ class PostActions:
         try:
             selected = await self._select_actor(root, identity)
             if selected is None:
-                return post_action_result(
+                return self._actor_unavailable(
                     permalink,
-                    "actor_unavailable",
                     "The requested actor could not be selected and verified. Nothing was published.",
                 )
             root = selected
@@ -1243,9 +1291,8 @@ class PostActions:
         try:
             selected = await self._select_actor(root, identity)
             if selected is None:
-                return post_action_result(
+                return self._actor_unavailable(
                     permalink,
-                    "actor_unavailable",
                     "The requested actor could not be selected and verified. Nothing was published.",
                 )
             root = selected
@@ -1369,9 +1416,8 @@ class PostActions:
         try:
             selected = await self._select_actor(root, identity)
             if selected is None:
-                return post_action_result(
+                return self._actor_unavailable(
                     permalink,
-                    "actor_unavailable",
                     "The requested actor could not be selected and verified.",
                 )
             root = selected

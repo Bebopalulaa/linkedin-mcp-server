@@ -218,6 +218,11 @@ def register_post_tools(
         confirm_comment=False to check that the post loads and offers a comment
         editor without typing anything.
 
+        A member who manages no page has no account switcher. The comment box's
+        own avatar then verifies the personal actor, in any interface language.
+        An ``actor_unavailable`` refusal carries ``diagnostics`` naming what the
+        page showed, and nothing is typed.
+
         Confirmation requires a new unique rendered comment identity with the
         exact body and requested actor's linked identity and avatar. A
         ``comment_unconfirmed`` status means the submit was
@@ -320,7 +325,7 @@ def register_post_tools(
         With confirmation, the automatic mention is cleared by default. Set
         mention_parent_author=True to preserve its verified rich mention of the
         parent comment's author (not the post author). The reply text is otherwise
-        exact. English and French reply labels are supported.
+        exact. English reply labels are currently required.
         retry_safe=False means submission may have occurred: inspect the thread
         before retrying, including after an interrupted call.
         """

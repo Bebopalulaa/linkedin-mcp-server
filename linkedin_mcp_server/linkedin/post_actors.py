@@ -3,6 +3,12 @@
 The observed SDUI picker exposes names and avatars but no profile URLs. Bind the
 requested URL on its own rendered page, then require both name and image asset
 in the picker. Unknown layouts and missing/ambiguous avatars refuse.
+
+A member who manages no page has no picker at all: the comment box shows only
+that member's own avatar. That sole-actor case is bound by the avatar asset
+alone, which does not depend on the interface language. If the avatar sits in
+a control this module cannot read (a switcher in an unsupported language), it
+refuses and reports the control's label instead of guessing.
 """
 
 from linkedin_mcp_server.linkedin.post_scope import REPLY_RANGE_JS
@@ -88,8 +94,45 @@ function actorOption(picker, actor) {
   });
   return options.length === 1 ? options[0] : null;
 }
+// The sole-actor composer avatar: the one avatar asset rendered in the
+// smallest container around the post's own comment editor, pinned when the
+// actor was bound so a reply editor opened later cannot stand in for it. The climb stops
+// before it reaches the action bar or any rendered comment, so the post
+// author's and commenters' avatars can never be read as the acting identity.
+// `control` is the label of an interactive wrapper around that avatar, which
+// is what an account switcher looks like in a language this module lacks.
+function soleActorAvatar(root, editor) {
+  if (!root?.isConnected || !editor?.isConnected || !root.contains(editor) ||
+      !actorVisible(editor)) return null;
+  const bar = root.__linkedinMcpPost?.bar;
+  let container = editor.parentElement;
+  while (container && container !== root && root.contains(container)) {
+    if ((bar && container.contains(bar)) ||
+        container.querySelector('[id^="replaceableComment_"]')) return null;
+    const images = Array.from(container.querySelectorAll('img[src]')).filter(img =>
+      actorVisible(img) && !editor.contains(img) && avatarKey(img.src));
+    if (images.length > 0) {
+      const keys = [...new Set(images.map(img => avatarKey(img.src)))];
+      if (keys.length !== 1) return null;
+      const wrappers = [...new Set(images.map(img =>
+        img.closest('button, [role="button"], [aria-haspopup]')).filter(node =>
+        node && container.contains(node)))];
+      const control = wrappers.length === 0 ? null :
+        ((wrappers[0].getAttribute('aria-label') || wrappers[0].innerText || '').trim() || 'unlabelled');
+      return {key: keys[0], control,
+        member: images.every(img => img.src.includes('profile-displayphoto'))};
+    }
+    container = container.parentElement;
+  }
+  return null;
+}
 function actorStillMatches(root) {
   const pin = root?.__linkedinMcpPost;
+  if (pin?.actorMode === 'sole' && !pin.actorRoot) {
+    if (!pin.actor || pin.route !== location.href || actorPicker() || actorSwitcher(root)) return false;
+    const sole = soleActorAvatar(root, pin.soleEditor);
+    return Boolean(sole && sole.control === null && sole.member && sole.key === pin.actor.avatar);
+  }
   if (!pin?.actor || pin.route !== location.href || actorPicker()) return false;
   if (pin.actorRoot) {
     return Boolean(root.isConnected && pin.actorRoot.__linkedinMcpPost === pin.actorPin &&
@@ -206,6 +249,35 @@ PIN_ACTOR_JS = (
   pin.actor = actor;
   pin.actorControl = control;
   return true;
+}
+"""
+)
+
+# A member with no page to act as sees no switcher. Bind the requested personal
+# actor to the comment box's own avatar, or refuse with the reason. Nothing is
+# clicked or typed here.
+PIN_SOLE_ACTOR_JS = (
+    "({root, actor}) => {"
+    + ACTOR_HELPERS_JS
+    + r"""
+  const pin = root?.__linkedinMcpPost;
+  const lang = document.documentElement.lang || '';
+  if (!pin || !root.isConnected || pin.route !== location.href) return {status: 'changed', lang};
+  if (!actor?.path?.startsWith('/in/')) return {status: 'unsupported_actor', lang};
+  if (actorSwitcher(root) || actorPicker()) return {status: 'switcher_present', lang};
+  const editors = Array.from(
+    root.querySelectorAll('[role="textbox"][contenteditable="true"]')
+  ).filter(actorVisible);
+  if (editors.length !== 1) return {status: editors.length === 0 ? 'no_editor' : 'ambiguous_editor', lang};
+  const sole = soleActorAvatar(root, editors[0]);
+  if (!sole) return {status: 'no_avatar', lang};
+  if (sole.control !== null) return {status: 'unknown_switcher', label: sole.control.slice(0, 120), lang};
+  if (!sole.member || sole.key !== actor.avatar) return {status: 'avatar_mismatch', lang};
+  pin.actor = actor;
+  pin.actorMode = 'sole';
+  pin.actorControl = null;
+  pin.soleEditor = editors[0];
+  return {status: 'pinned', lang};
 }
 """
 )
