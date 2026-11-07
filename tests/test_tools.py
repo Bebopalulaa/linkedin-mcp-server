@@ -271,6 +271,31 @@ _A_VALID_CALL = [
     ),
     ("feed", "get_feed", {}),
     ("post", "search_posts", {"keywords": "python"}),
+    (
+        "post",
+        "react_to_post",
+        {"post": "urn:li:activity:123", "actor": "https://www.linkedin.com/in/alice/"},
+    ),
+    (
+        "post",
+        "comment_on_post",
+        {
+            "post": "urn:li:activity:123",
+            "comment": "Clean silhouette",
+            "actor": "https://www.linkedin.com/in/alice/",
+        },
+    ),
+    ("post", "get_post_comments", {"post": "urn:li:activity:123"}),
+    (
+        "post",
+        "reply_to_comment",
+        {
+            "post": "urn:li:activity:123",
+            "comment_reference": "urn:li:comment:(activity:123,4)",
+            "reply": "Thanks",
+            "actor": "https://www.linkedin.com/in/alice/",
+        },
+    ),
 ]
 
 
